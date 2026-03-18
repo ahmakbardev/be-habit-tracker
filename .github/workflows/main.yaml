@@ -20,12 +20,28 @@ jobs:
           extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, bcmath, mongodb
           coverage: none
 
+      - name: Test SSH Connection (Verify Credentials)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USERNAME }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_PORT }}
+          script: |
+            echo "--- Verifikasi Koneksi Server ---"
+            echo "Koneksi SSH Berhasil!"
+            echo "User: $(whoami)"
+            echo "Target Path: /home/u723134020/domains/api-ht.ahmakbar.space/"
+            mkdir -p /home/u723134020/domains/api-ht.ahmakbar.space/
+            cd /home/u723134020/domains/api-ht.ahmakbar.space/
+            echo "Current Directory: $(pwd)"
+            echo "---------------------------------"
+
       - name: Install Composer Dependencies
         run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
       - name: Create Deployment Artifact
         run: |
-          # Kita tetap buat tarball untuk vendor dan file terbaru agar cepat
           tar -czf deploy.tar.gz . --exclude=.git --exclude=node_modules --exclude=storage/*.log
 
       - name: Upload to Server (SFTP/SSH)
@@ -57,7 +73,7 @@ jobs:
                 git pull origin main
             fi
 
-            # Extract tarball (untuk update vendor dan file terbaru dari runner)
+            # Extract tarball
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
             
@@ -68,7 +84,6 @@ jobs:
             php artisan view:cache
             
             # Symlink Laravel public -> public_html khusus Hostinger
-            # Cek jika public_html adalah folder asli, kita backup dulu
             if [ -d "public_html" ] && [ ! -L "public_html" ]; then
                 mv public_html public_html_backup_$(date +%F_%H%M%S)
             fi
