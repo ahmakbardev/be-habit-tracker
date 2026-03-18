@@ -40,7 +40,12 @@ jobs:
 
       - name: Create Deployment Artifact
         run: |
-          tar --exclude=.git --exclude=node_modules --exclude=storage/*.log -czf deploy.tar.gz .
+          tar \
+            --exclude=.git \
+            --exclude=node_modules \
+            --exclude=storage/logs \
+            --warning=no-file-changed \
+            -czf deploy.tar.gz .
 
       - name: Upload to Server (SFTP/SSH)
         uses: appleboy/scp-action@master
