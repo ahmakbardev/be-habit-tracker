@@ -48,20 +48,21 @@ Gunakan ini saat user melakukan logout atau menonaktifkan notifikasi secara manu
 ---
 
 ## 3. Struktur Payload Notifikasi
-Saat Backend mengirim notifikasi (otomatis 10 menit sebelum Todo), Service Worker di FE akan menerima payload dengan struktur berikut:
+Saat Backend mengirim notifikasi (otomatis 5-10 menit sebelum jadwal Habit), Service Worker di FE akan menerima payload dengan struktur berikut:
 
 ```json
 {
-    "title": "Ingat Todo Kamu!",
-    "body": "Task 'Nama Task' akan dimulai dalam 10 menit.",
+    "title": "Waktunya Habit Kamu!",
+    "body": "Jangan lupa: 'Nama Habit' dijadwalkan pukul 08:00.",
     "icon": "/icon-192x192.png",
     "data": {
-        "id": "UUID-TASK-DI-SINI"
+        "habit_id": "UUID-HABIT-DI-SINI",
+        "time_slot": "08:00"
     },
     "actions": [
         {
-            "action": "view_task",
-            "title": "Buka Aplikasi"
+            "action": "view_habit",
+            "title": "Buka Habit Tracker"
         }
     ]
 }
@@ -69,17 +70,17 @@ Saat Backend mengirim notifikasi (otomatis 10 menit sebelum Todo), Service Worke
 
 **Tips untuk Frontend:**
 - Pastikan Service Worker menangani event `push` dan memanggil `self.registration.showNotification()`.
-- Gunakan `data.id` untuk melakukan redirect (deep linking) saat notifikasi diklik.
+- Gunakan `data.habit_id` untuk melakukan redirect (deep linking) saat notifikasi diklik.
 
 ---
 
 ## 4. Cara Kerja & Jadwal (Backend Logic)
 1.  **Otomatisasi**: Backend menjalankan pengecekan setiap **1 menit sekali**.
-2.  **Kriteria**: Backend mencari task yang:
-    - Statusnya belum `completed`.
-    - Memiliki `due_at` (waktu jatuh tempo).
-    - Berada dalam rentang **5 sampai 11 menit** dari waktu sekarang.
-3.  **Pengiriman**: Notifikasi akan dikirimkan ke semua browser yang sudah terdaftar untuk user tersebut (PC, HP Android, dll).
+2.  **Kriteria**: Backend mencari Habit yang:
+    - Belum di-archive (`archived_at` IS NULL).
+    - Memiliki array `schedules` (misal `["08:00", "12:00"]`).
+    - Salah satu jam dalam `schedules` berada dalam rentang **5 sampai 11 menit** dari waktu sekarang.
+3.  **Pengiriman**: Notifikasi akan dikirimkan ke semua browser yang sudah terdaftar untuk user tersebut.
 
 ---
 
