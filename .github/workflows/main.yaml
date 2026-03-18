@@ -29,14 +29,11 @@ jobs:
           port: ${{ secrets.HOSTINGER_PORT }}
           timeout: 60s
           script: |
-            echo "--- Lokasi Binary di Server ---"
-            which php || echo "php tidak ditemukan"
-            which git || echo "git tidak ditemukan"
-            which composer || echo "composer tidak ditemukan"
+            echo "--- Server Environment Check ---"
             php -v
-            composer -v
-            echo "-------------------------------"
+            git --version
             mkdir -p /home/u723134020/domains/api-ht.ahmakbar.space/
+            echo "-------------------------------"
 
       - name: Install Composer Dependencies
         run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --ignore-platform-reqs
@@ -66,39 +63,46 @@ jobs:
           timeout: 60s
           command_timeout: 20m
           script: |
-            cd /home/u723134020/domains/api-ht.ahmakbar.space/
+            cd /home/u723134020/domains/api-ht.ahmakbar.space/ || exit 1
             
-            # Perbaikan: Menggunakan git init jika folder tidak kosong (karena git clone . sering gagal di folder yang sudah ada isinya)
+            # Tambahkan safe directory untuk git agar tidak error permission
+            git config --global --add safe.directory /home/u723134020/domains/api-ht.ahmakbar.space
+            
+            # Case: Clone jika belum ada, Pull jika sudah ada
             if [ ! -d ".git" ]; then
-                echo "Repository not found. Initializing..."
-                git init
-                # Menggunakan token github untuk auth jika repo privat
-                git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-                git fetch
-                git checkout -f main
+                echo "Repository not found. Cloning directly..."
+                # Kita clone ke folder saat ini (pastikan folder kosong atau gunakan git init logic)
+                git clone https://github.com/ahmakbardev/be-habit-tracker.git .
             else
-                echo "Repository found. Resetting and pulling latest changes..."
+                echo "Repository found. Pulling latest changes..."
                 git fetch origin main
                 git reset --hard origin/main
             fi
 
-            # Extract tarball untuk update vendor & file terbaru
-            tar -xzf deploy.tar.gz
-            rm deploy.tar.gz
+            # Extract tarball untuk vendor & file terbaru dari GitHub Runner
+            if [ -f "deploy.tar.gz" ]; then
+                echo "Extracting deployment artifact..."
+                tar -xzf deploy.tar.gz
+                rm deploy.tar.gz
+            fi
             
-            # Setup Environment & Optimasi
-            php artisan migrate --force
+            # Setup Environment & Optimasi Laravel
+            echo "Running Laravel optimizations..."
+            php artisan migrate --force || echo "Migration failed, check database"
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
             
-            # Symlink Laravel public -> public_html khusus Hostinger
+            # Kasus public_html: Kita pastikan ini adalah SYMLINK ke public
+            echo "Checking public_html status..."
             if [ -d "public_html" ] && [ ! -L "public_html" ]; then
+                echo "public_html is a physical directory. Moving to backup..."
                 mv public_html public_html_backup_$(date +%F_%H%M%S)
             fi
             
-            # Buat/Re-link Symlink
+            # Buat atau update symlink
             ln -sfn $(pwd)/public $(pwd)/public_html
+            echo "Symlink updated: public_html -> public"
             
             # Fix permissions
             chmod -R 775 storage bootstrap/cache
