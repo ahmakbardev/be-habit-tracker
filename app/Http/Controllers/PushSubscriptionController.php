@@ -13,7 +13,7 @@ class PushSubscriptionController extends Controller
     public function update(Request $request)
     {
         try {
-            $this->validate($request, [
+            $request->validate([
                 'endpoint' => 'required',
                 'keys.auth' => 'required',
                 'keys.p256dh' => 'required'
@@ -38,6 +38,12 @@ class PushSubscriptionController extends Controller
                 'status' => 'success',
                 'message' => 'Push subscription updated successfully'
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             Log::error('Push Subscription Update Error: ' . $e->getMessage());
             return response()->json([
@@ -53,7 +59,7 @@ class PushSubscriptionController extends Controller
     public function destroy(Request $request)
     {
         try {
-            $this->validate($request, [
+            $request->validate([
                 'endpoint' => 'required'
             ]);
 
