@@ -32,6 +32,7 @@ class PushSubscriptionController extends Controller
 
             // Using the trait's method updatePushSubscription
             $user->updatePushSubscription($endpoint, $key, $token, $contentEncoding);
+            Log::info("Push subscription saved for User ID: {$user->id} with endpoint: {$endpoint}");
 
             return response()->json([
                 'status' => 'success',

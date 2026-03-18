@@ -39,6 +39,8 @@ class HabitReminderNotification extends Notification
      */
     public function toWebPush($notifiable, $notification)
     {
+        \Illuminate\Support\Facades\Log::info("Preparing WebPush for Habit: {$this->habit->name} (ID: {$this->habit->id}) to User ID: {$notifiable->id}");
+        
         return (new WebPushMessage)
             ->title('Waktunya Habit!')
             ->icon('/icon-192x192.png')
