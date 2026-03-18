@@ -36,11 +36,23 @@ class TodoReminderNotification extends Notification
      */
     public function toWebPush($notifiable, $notification)
     {
+        $keyword = urlencode($this->task->title);
+        // Using a focused task/todo image
+        $dynamicImage = "https://images.unsplash.com/photo-1484480974693-6ff0a00bf1f1?auto=format&fit=crop&w=1200&q=80&task={$keyword}";
+
         return (new WebPushMessage)
-            ->title('Ingat Todo Kamu!')
-            ->icon('/icon-192x192.png')
-            ->body("Task '{$this->task->title}' akan dimulai dalam 10 menit.")
-            ->action('Buka Aplikasi', 'view_task')
-            ->data(['id' => $this->task->id]);
+            ->title("📌 Ingat Todo: {$this->task->title}!")
+            ->body("Task '{$this->task->title}' akan segera dimulai. Jangan lupa dikerjakan ya!")
+            ->icon('/favicon.ico')
+            ->badge('/favicon.ico')
+            ->image($dynamicImage)
+            ->action('🚀 Buka Aplikasi', 'view_app')
+            ->action('✅ Selesai', 'mark_done')
+            ->tag("todo-{$this->task->id}")
+            ->data([
+                'id' => $this->task->id,
+                'url' => '/tasks',
+                'type' => 'todo_reminder'
+            ]);
     }
 }
