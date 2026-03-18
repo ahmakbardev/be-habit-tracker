@@ -39,7 +39,7 @@ jobs:
             echo "---------------------------------"
 
       - name: Install Composer Dependencies
-        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --ignore-platform-reqs --ignore-platform-reqs
 
       - name: Create Deployment Artifact
         run: |
