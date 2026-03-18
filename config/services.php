@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'media' => [
+        'url' => env('MEDIA_PLATFORM_URL', 'https://s3.ahmakbar.space'),
+        'project_name' => env('MEDIA_PROJECT_NAME', 'habit-tracker'),
+        'project_id' => env('MEDIA_PROJECT_ID'),
+    ],
+
 ];
