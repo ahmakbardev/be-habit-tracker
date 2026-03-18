@@ -40,7 +40,6 @@ jobs:
 
       - name: Create Deployment Artifact
         run: |
-          # Tambahkan || true agar jika ada warning file changed tetap lanjut
           tar -czf deploy.tar.gz . --exclude=.git --exclude=node_modules --exclude=storage/*.log || true
 
       - name: Upload to Server (SFTP/SSH)
@@ -66,44 +65,44 @@ jobs:
           script: |
             cd /home/u723134020/domains/api-ht.ahmakbar.space/ || exit 1
             
-            # Tambahkan safe directory untuk git agar tidak error permission
-            git config --global --add safe.directory /home/u723134020/domains/api-ht.ahmakbar.space
-            
-            # Case: Clone jika belum ada, Pull jika sudah ada
-            if [ ! -d ".git" ]; then
-                echo "Repository not found. Cloning directly..."
-                # Kita clone ke folder saat ini (pastikan folder kosong atau gunakan git init logic)
-                git clone https://github.com/ahmakbardev/be-habit-tracker.git .
+            # 1. Clone/Pull ke folder project khusus
+            if [ ! -d "be-habit-tracker" ]; then
+                echo "Cloning repository into be-habit-tracker..."
+                git clone https://github.com/ahmakbardev/be-habit-tracker.git be-habit-tracker
             else
-                echo "Repository found. Pulling latest changes..."
+                echo "Project folder exists. Syncing..."
+                cd be-habit-tracker
+                git config --global --add safe.directory $(pwd)
                 git fetch origin main
                 git reset --hard origin/main
+                cd ..
             fi
 
-            # Extract tarball untuk vendor & file terbaru dari GitHub Runner
+            # 2. Extract vendor & files terbaru ke dalam folder project
             if [ -f "deploy.tar.gz" ]; then
-                echo "Extracting deployment artifact..."
-                tar -xzf deploy.tar.gz
+                echo "Extracting deployment artifact into be-habit-tracker..."
+                # Gunakan -C untuk extract langsung ke folder project
+                tar -xzf deploy.tar.gz -C be-habit-tracker
                 rm deploy.tar.gz
             fi
             
-            # Setup Environment & Optimasi Laravel
+            # 3. Jalankan Artisan di dalam folder project
+            cd be-habit-tracker
             echo "Running Laravel optimizations..."
-            php artisan migrate --force || echo "Migration failed, check database"
+            php artisan migrate --force || echo "Migration failed"
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+            chmod -R 775 storage bootstrap/cache
+            cd ..
             
-            # Kasus public_html: Kita pastikan ini adalah SYMLINK ke public
-            echo "Checking public_html status..."
+            # 4. Manage Symlink: public_html -> be-habit-tracker/public
+            echo "Checking public_html symlink..."
             if [ -d "public_html" ] && [ ! -L "public_html" ]; then
-                echo "public_html is a physical directory. Moving to backup..."
+                echo "Moving physical public_html to backup..."
                 mv public_html public_html_backup_$(date +%F_%H%M%S)
             fi
             
-            # Buat atau update symlink
-            ln -sfn $(pwd)/public $(pwd)/public_html
-            echo "Symlink updated: public_html -> public"
-            
-            # Fix permissions
-            chmod -R 775 storage bootstrap/cache
+            # Buat symlink menggunakan absolute path agar aman
+            ln -sfn $(pwd)/be-habit-tracker/public $(pwd)/public_html
+            echo "Deployment finished successfully!"
