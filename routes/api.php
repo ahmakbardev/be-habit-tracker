@@ -33,7 +33,10 @@ Route::prefix('notes')->controller(NoteController::class)->group(function () {
  */
 Route::prefix('habits')->controller(App\Http\Controllers\HabitController::class)->group(function () {
     Route::get('/', 'index');
+    Route::get('/completions', 'getCompletions');
+    Route::get('/stats', 'getStats');
     Route::post('/', 'store');
+    Route::patch('/{id}', 'update');
     Route::post('/toggle', 'toggleLog');
     Route::get('/{id}/efficiency', 'getEfficiency');
     Route::delete('/{id}', 'destroy');
@@ -49,6 +52,14 @@ Route::prefix('tasks')->controller(App\Http\Controllers\TaskController::class)->
     Route::post('/projects', 'storeProject');
     Route::post('/', 'storeTask');
     Route::put('/reorder', 'reorderTasks');
+});
+
+/**
+ * Push Subscription Routes
+ */
+Route::prefix('push-subscriptions')->controller(App\Http\Controllers\PushSubscriptionController::class)->group(function () {
+    Route::post('/', 'update');
+    Route::delete('/', 'destroy');
 });
 
 

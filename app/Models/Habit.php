@@ -18,11 +18,13 @@ class Habit extends Model
         'color',
         'schedules',
         'goal',
+        'archived_at',
     ];
 
     protected $casts = [
         'schedules' => 'array',
         'goal' => 'integer',
+        'archived_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

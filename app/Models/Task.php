@@ -38,4 +38,12 @@ class Task extends Model
     {
         return $this->belongsTo(TaskColumn::class, 'column_id');
     }
+
+    /**
+     * Get the user that owns the task (through project and folder)
+     */
+    public function getUserAttribute()
+    {
+        return $this->project?->folder?->user;
+    }
 }
