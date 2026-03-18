@@ -11,6 +11,8 @@ class TaskColumn extends Model
 {
     use HasUuids;
 
+    protected $connection = 'mysql';
+
     protected $fillable = [
         'project_id',
         'title',

@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Log;
 
 Schedule::call(function () {
     Log::info('--- Habit Scheduler Start ---');
+    Log::info('Default Connection: ' . config('database.default'));
+    Log::info('User Connection: ' . (new \App\Models\User)->getConnectionName());
 
     // Ambil semua habit aktif (belum di-archive)
     $habits = Habit::whereNull('archived_at')->get();

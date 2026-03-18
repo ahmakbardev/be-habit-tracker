@@ -10,6 +10,8 @@ class Task extends Model
 {
     use HasUuids;
 
+    protected $connection = 'mysql';
+
     protected $fillable = [
         'project_id',
         'column_id',
