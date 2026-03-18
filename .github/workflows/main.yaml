@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -27,11 +27,12 @@ jobs:
           username: ${{ secrets.HOSTINGER_USERNAME }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: ${{ secrets.HOSTINGER_PORT }}
+          timeout: 60s
+          command_timeout: 10m
           script: |
             echo "--- Verifikasi Koneksi Server ---"
             echo "Koneksi SSH Berhasil!"
             echo "User: $(whoami)"
-            echo "Target Path: /home/u723134020/domains/api-ht.ahmakbar.space/"
             mkdir -p /home/u723134020/domains/api-ht.ahmakbar.space/
             cd /home/u723134020/domains/api-ht.ahmakbar.space/
             echo "Current Directory: $(pwd)"
@@ -51,6 +52,8 @@ jobs:
           username: ${{ secrets.HOSTINGER_USERNAME }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: ${{ secrets.HOSTINGER_PORT }}
+          timeout: 60s
+          command_timeout: 15m
           source: "deploy.tar.gz"
           target: "/home/u723134020/domains/api-ht.ahmakbar.space/"
 
@@ -61,6 +64,8 @@ jobs:
           username: ${{ secrets.HOSTINGER_USERNAME }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: ${{ secrets.HOSTINGER_PORT }}
+          timeout: 60s
+          command_timeout: 20m
           script: |
             cd /home/u723134020/domains/api-ht.ahmakbar.space/
             
