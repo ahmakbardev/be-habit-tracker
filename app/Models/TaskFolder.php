@@ -11,6 +11,8 @@ class TaskFolder extends Model
 {
     use HasUuids;
 
+    protected $connection = 'mysql';
+
     protected $fillable = [
         'user_id',
         'name',

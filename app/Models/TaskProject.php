@@ -11,6 +11,8 @@ class TaskProject extends Model
 {
     use HasUuids;
 
+    protected $connection = 'mysql';
+
     protected $fillable = [
         'folder_id',
         'name',
