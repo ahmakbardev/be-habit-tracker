@@ -20,7 +20,7 @@ jobs:
           extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, bcmath, mongodb
           coverage: none
 
-      - name: Test SSH Connection (Verify Credentials)
+      - name: Verify Server Environment
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
@@ -28,18 +28,18 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: ${{ secrets.HOSTINGER_PORT }}
           timeout: 60s
-          command_timeout: 10m
           script: |
-            echo "--- Verifikasi Koneksi Server ---"
-            echo "Koneksi SSH Berhasil!"
-            echo "User: $(whoami)"
+            echo "--- Lokasi Binary di Server ---"
+            which php || echo "php tidak ditemukan"
+            which git || echo "git tidak ditemukan"
+            which composer || echo "composer tidak ditemukan"
+            php -v
+            composer -v
+            echo "-------------------------------"
             mkdir -p /home/u723134020/domains/api-ht.ahmakbar.space/
-            cd /home/u723134020/domains/api-ht.ahmakbar.space/
-            echo "Current Directory: $(pwd)"
-            echo "---------------------------------"
 
       - name: Install Composer Dependencies
-        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --ignore-platform-reqs --ignore-platform-reqs
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --ignore-platform-reqs
 
       - name: Create Deployment Artifact
         run: |
@@ -53,7 +53,6 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: ${{ secrets.HOSTINGER_PORT }}
           timeout: 60s
-          command_timeout: 15m
           source: "deploy.tar.gz"
           target: "/home/u723134020/domains/api-ht.ahmakbar.space/"
 
@@ -69,16 +68,21 @@ jobs:
           script: |
             cd /home/u723134020/domains/api-ht.ahmakbar.space/
             
-            # Case: Clone jika belum ada, Pull jika sudah ada
+            # Perbaikan: Menggunakan git init jika folder tidak kosong (karena git clone . sering gagal di folder yang sudah ada isinya)
             if [ ! -d ".git" ]; then
-                echo "Repository not found. Cloning..."
-                git clone https://github.com/${{ github.repository }}.git .
+                echo "Repository not found. Initializing..."
+                git init
+                # Menggunakan token github untuk auth jika repo privat
+                git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+                git fetch
+                git checkout -f main
             else
-                echo "Repository found. Pulling latest changes..."
-                git pull origin main
+                echo "Repository found. Resetting and pulling latest changes..."
+                git fetch origin main
+                git reset --hard origin/main
             fi
 
-            # Extract tarball
+            # Extract tarball untuk update vendor & file terbaru
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
             
