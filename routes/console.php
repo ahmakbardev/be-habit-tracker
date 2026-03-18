@@ -22,9 +22,9 @@ Schedule::call(function () {
     $habits = Habit::whereNull('archived_at')->get();
     Log::info('Processing ' . $habits->count() . ' habits.');
 
-    // Rentang waktu pengiriman (5-11 menit sebelum jadwal)
-    $windowStart = now()->addMinutes(5);
-    $windowEnd = now()->addMinutes(11);
+    // Rentang waktu pengiriman: Pas di jamnya (toleransi 1 menit)
+    $windowStart = now()->subMinute();
+    $windowEnd = now()->addMinute();
 
     foreach ($habits as $habit) {
         $schedules = $habit->schedules ?? [];
@@ -35,6 +35,7 @@ Schedule::call(function () {
 
             try {
                 $scheduleTime = Carbon::createFromFormat('H:i', $timeStr);
+                Log::info("Checking habit '{$habit->name}' schedule: {$timeStr} against window: {$windowStart->format('H:i')}-{$windowEnd->format('H:i')}");
 
                 if ($scheduleTime->between($windowStart, $windowEnd)) {
                     $user = $habit->user;
