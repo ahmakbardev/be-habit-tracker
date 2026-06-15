@@ -24,11 +24,7 @@ class PushSubscriptionController extends Controller
             $token = $request->keys['auth'];
             $contentEncoding = $request->get('content_encoding', 'aesgcm'); // Default encoding
 
-            // Get user (Temporary first user for development)
-            $user = \App\Models\User::first();
-            if (!$user) {
-                return response()->json(['status' => 'error', 'message' => 'User not found'], 404);
-            }
+            $user = $request->user();
 
             // Using the trait's method updatePushSubscription
             $user->updatePushSubscription($endpoint, $key, $token, $contentEncoding);
@@ -63,12 +59,7 @@ class PushSubscriptionController extends Controller
                 'endpoint' => 'required'
             ]);
 
-            $user = \App\Models\User::first();
-            if (!$user) {
-                return response()->json(['status' => 'error', 'message' => 'User not found'], 404);
-            }
-
-            $user->deletePushSubscription($request->endpoint);
+            $request->user()->deletePushSubscription($request->endpoint);
 
             return response()->json([
                 'status' => 'success',

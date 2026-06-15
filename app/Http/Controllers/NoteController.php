@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Note;
 use App\Models\NoteFolder;
 use App\Models\NoteWorkspace;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -16,16 +15,10 @@ class NoteController extends Controller
     /**
      * Get all folders, workspaces, and notes for a user (Optimized)
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $user = User::first();
-            if (!$user) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'User context not found.'
-                ], 404);
-            }
+            $user = $request->user();
 
             // 1. Fetch Folders & Workspaces (MySQL)
             $folders = NoteFolder::where('user_id', $user->id)
@@ -111,8 +104,8 @@ class NoteController extends Controller
                 ]);
             }
 
-            $user = User::first();
-            
+            $user = $request->user();
+
             // Get user's workspace IDs to restrict search
             $workspaceIds = NoteWorkspace::whereHas('folder', function($q) use ($user) {
                 $q->where('user_id', $user->id);
@@ -230,9 +223,8 @@ class NoteController extends Controller
                 'order_index' => 'nullable|integer',
             ]);
 
-            $user = User::first();
             $folder = NoteFolder::create([
-                'user_id' => $user->id,
+                'user_id' => $request->user()->id,
                 'name' => $validated['name'],
                 'icon_name' => $validated['icon_name'] ?? 'folder',
                 'order_index' => $validated['order_index'] ?? 0,
