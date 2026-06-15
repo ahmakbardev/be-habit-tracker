@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Habit;
 use App\Models\HabitCompletion;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -20,7 +19,7 @@ class HabitController extends Controller
     public function index(Request $request)
     {
         try {
-            $user = User::first();
+            $user = $request->user();
             $dateStr = $request->query('date', Carbon::today()->toDateString());
             $requestDate = Carbon::parse($dateStr)->startOfDay();
 
@@ -67,7 +66,7 @@ class HabitController extends Controller
                 'end_date' => 'required|date_format:Y-m-d',
             ]);
 
-            $user = User::first();
+            $user = $request->user();
             $completions = HabitCompletion::where('user_id', $user->id)
                 ->whereBetween('date', [$request->start_date, $request->end_date])
                 ->get();
@@ -98,7 +97,7 @@ class HabitController extends Controller
                 'goal' => 'nullable|integer',
             ]);
 
-            $user = User::first();
+            $user = $request->user();
             $habit = Habit::create([
                 'user_id' => $user->id,
                 'name' => $validated['name'],
@@ -203,7 +202,7 @@ class HabitController extends Controller
                 ], 422);
             }
 
-            $user = User::first();
+            $user = $request->user();
             
             $log = HabitCompletion::where('habit_id', $validated['habit_id'])
                 ->where('user_id', $user->id)
@@ -248,10 +247,10 @@ class HabitController extends Controller
     /**
      * Get global stats for all habits (Efficiency + 7-day chart)
      */
-    public function getStats()
+    public function getStats(Request $request)
     {
         try {
-            $user = User::first();
+            $user = $request->user();
             $habits = Habit::where('user_id', $user->id)->get();
             
             $totalPossible = 0;

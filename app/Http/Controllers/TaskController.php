@@ -6,7 +6,6 @@ use App\Models\Task;
 use App\Models\TaskColumn;
 use App\Models\TaskFolder;
 use App\Models\TaskProject;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,11 +17,10 @@ class TaskController extends Controller
     /**
      * Get all task folders and projects
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $user = User::first();
-            $folders = TaskFolder::where('user_id', $user->id)
+            $folders = TaskFolder::where('user_id', $request->user()->id)
                 ->with('projects')
                 ->orderBy('order_index')
                 ->get();
@@ -193,9 +191,8 @@ class TaskController extends Controller
                 'icon_name' => 'nullable|string|max:50',
             ]);
 
-            $user = User::first();
             $folder = TaskFolder::create([
-                'user_id' => $user->id,
+                'user_id' => $request->user()->id,
                 'name' => $validated['name'],
                 'icon_name' => $validated['icon_name'] ?? 'folder',
             ]);
