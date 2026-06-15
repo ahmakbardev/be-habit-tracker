@@ -21,3 +21,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Claude / AI generated files
+.review/
+*.md
+!README.md
