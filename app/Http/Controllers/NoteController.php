@@ -351,7 +351,12 @@ class NoteController extends Controller
                 'plain_text_preview' => 'sometimes|string',
                 'highlight' => 'sometimes|boolean',
                 'order_index' => 'sometimes|integer',
+                'is_public' => 'sometimes|boolean',
             ]);
+
+            if (isset($validated['is_public']) && $validated['is_public'] && !$note->public_token) {
+                $validated['public_token'] = Str::random(32);
+            }
 
             $note->update($validated);
 

@@ -27,8 +27,18 @@ class Note extends Model
     protected $casts = [
         'content' => 'array',
         'highlight' => 'boolean',
-        'is_public' => 'boolean',
     ];
+
+    // Ensure these fields always appear in responses, even for old documents
+    protected $attributes = [
+        'is_public' => false,
+        'public_token' => null,
+    ];
+
+    public function getIsPublicAttribute($value): bool
+    {
+        return (bool) $value;
+    }
 
     /**
      * Cross-Database Relationship back to MySQL
