@@ -20,14 +20,14 @@ class Note extends Model
         'plain_text_preview',
         'highlight',
         'order_index',
+        'is_public',
+        'public_token',
     ];
 
-    /**
-     * Cast JSON content for easier access
-     */
     protected $casts = [
         'content' => 'array',
         'highlight' => 'boolean',
+        'is_public' => 'boolean',
     ];
 
     /**

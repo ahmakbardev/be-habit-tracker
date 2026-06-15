@@ -2,7 +2,13 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\NoteController;
+use App\Http\Controllers\PublicNoteController;
 use Illuminate\Support\Facades\Route;
+
+/**
+ * Public Note Pages (no auth)
+ */
+Route::get('/public/notes/{token}', [PublicNoteController::class, 'show']);
 
 /**
  * Auth API Routes (Public)
@@ -41,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', 'storeNote');
         Route::patch('/{id}', 'updateNote');
         Route::post('/{id}/duplicate', 'duplicateNote');
+        Route::patch('/{id}/publish', 'togglePublish');
         Route::delete('/{id}', 'destroyNote');
         Route::post('/media/upload', [\App\Http\Controllers\MediaController::class, 'upload']);
     });

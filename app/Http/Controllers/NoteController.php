@@ -7,6 +7,7 @@ use App\Models\NoteFolder;
 use App\Models\NoteWorkspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Exception;
 
@@ -132,6 +133,46 @@ class NoteController extends Controller
     }
 
     /**
+     * Toggle publish state of a Note
+     */
+    public function togglePublish(Request $request, $id)
+    {
+        try {
+            $note = Note::find($id);
+            if (!$note) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Note not found.'
+                ], 404);
+            }
+
+            $isPublic = !$note->is_public;
+
+            if ($isPublic && !$note->public_token) {
+                $note->public_token = Str::random(32);
+            }
+
+            $note->is_public = $isPublic;
+            $note->save();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => $isPublic ? 'Note published.' : 'Note unpublished.',
+                'data' => [
+                    'is_public' => $note->is_public,
+                    'public_token' => $note->is_public ? $note->public_token : null,
+                ],
+            ]);
+        } catch (Exception $e) {
+            Log::error('Toggle Publish Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to toggle publish state.'
+            ], 500);
+        }
+    }
+
+    /**
      * Duplicate a Note (MongoDB)
      */
     public function duplicateNote($id)
@@ -145,9 +186,11 @@ class NoteController extends Controller
                 ], 404);
             }
 
-            // Create a clone
+            // Create a clone — always private, no shared token
             $newNote = $note->replicate();
             $newNote->title = $note->title . ' (Copy)';
+            $newNote->is_public = false;
+            $newNote->public_token = null;
             $newNote->created_at = now();
             $newNote->updated_at = now();
             $newNote->save();
