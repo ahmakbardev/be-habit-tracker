@@ -21,7 +21,7 @@ Route::prefix('auth')->controller(AuthController::class)->group(function () {
 });
 
 Route::prefix('auth')->controller(ForgotPasswordController::class)->group(function () {
-    Route::post('/forgot-password', 'sendResetLink');
+    Route::post('/forgot-password', 'sendOtp');
     Route::post('/reset-password', 'resetPassword');
 });
 

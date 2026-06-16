@@ -2,33 +2,46 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OtpMail;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Exception;
 
 class ForgotPasswordController extends Controller
 {
-    public function sendResetLink(Request $request)
+    private function cacheKey(string $email): string
+    {
+        return 'password_reset_otp_' . md5(strtolower($email));
+    }
+
+    public function sendOtp(Request $request)
     {
         try {
-            $request->validate([
-                'email' => 'required|email',
-            ]);
+            $request->validate(['email' => 'required|email']);
 
-            $status = Password::sendResetLink($request->only('email'));
+            $user = User::where('email', $request->email)->first();
 
-            if ($status === Password::RESET_LINK_SENT) {
+            if (!$user) {
                 return response()->json([
-                    'status'  => 'success',
-                    'message' => 'Reset link sent to your email.',
-                ]);
+                    'status'  => 'error',
+                    'message' => 'Email tidak terdaftar.',
+                ], 422);
             }
 
+            $otp = str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+
+            Cache::put($this->cacheKey($request->email), Hash::make($otp), now()->addMinutes(10));
+
+            Mail::to($user->email)->send(new OtpMail($user->name, $otp));
+
             return response()->json([
-                'status'  => 'error',
-                'message' => __($status),
-            ], 422);
+                'status'  => 'success',
+                'message' => 'Kode OTP telah dikirim ke email kamu.',
+            ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status'  => 'error',
@@ -38,7 +51,7 @@ class ForgotPasswordController extends Controller
         } catch (Exception $e) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Failed to send reset link.',
+                'message' => 'Gagal mengirim OTP.',
             ], 500);
         }
     }
@@ -47,29 +60,37 @@ class ForgotPasswordController extends Controller
     {
         try {
             $request->validate([
-                'token'                 => 'required|string',
                 'email'                 => 'required|email',
+                'otp'                   => 'required|string|size:4',
                 'password'              => 'required|string|min:6|confirmed',
             ]);
 
-            $status = Password::reset(
-                $request->only('email', 'password', 'password_confirmation', 'token'),
-                function ($user, $password) {
-                    $user->forceFill(['password' => bcrypt($password)])->save();
-                }
-            );
+            $cached = Cache::get($this->cacheKey($request->email));
 
-            if ($status === Password::PASSWORD_RESET) {
+            if (!$cached || !Hash::check($request->otp, $cached)) {
                 return response()->json([
-                    'status'  => 'success',
-                    'message' => 'Password reset successfully. You can now login.',
-                ]);
+                    'status'  => 'error',
+                    'message' => 'Kode OTP tidak valid atau sudah kadaluarsa.',
+                ], 422);
             }
 
+            $user = User::where('email', $request->email)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Email tidak ditemukan.',
+                ], 422);
+            }
+
+            $user->update(['password' => Hash::make($request->password)]);
+
+            Cache::forget($this->cacheKey($request->email));
+
             return response()->json([
-                'status'  => 'error',
-                'message' => __($status),
-            ], 422);
+                'status'  => 'success',
+                'message' => 'Password berhasil direset. Silakan login.',
+            ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status'  => 'error',
@@ -79,7 +100,7 @@ class ForgotPasswordController extends Controller
         } catch (Exception $e) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Failed to reset password.',
+                'message' => 'Gagal mereset password.',
             ], 500);
         }
     }
