@@ -1,82 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
   <title>{{ $subject ?? 'Self Note' }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    body { margin:0;padding:0;background-color:#f4f4f5; }
+    * { box-sizing:border-box; }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 
-  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f8fafc;padding:48px 16px;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f4f4f5;padding:48px 20px 56px;">
     <tr>
-      <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:580px;">
+      <td align="center" valign="top">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;">
 
-          {{-- ===== CARD ===== --}}
+          {{-- ── CARD ── --}}
           <tr>
-            <td style="background-color:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;">
+            <td style="background-color:#ffffff;border-radius:16px;border:1px solid #e4e4e7;overflow:hidden;">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
 
-              {{-- Hero Image with overlay --}}
-              <tr>
-                <td style="padding:0;position:relative;line-height:0;">
-                  <div style="position:relative;line-height:0;">
-                    <img
-                      src="https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=580&h=200&fit=crop&auto=format&q=80"
-                      width="580"
-                      alt=""
-                      style="width:100%;max-width:580px;height:200px;object-fit:cover;display:block;"
-                    />
-                    {{-- Dark overlay --}}
-                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,rgba(15,23,42,0.72) 0%,rgba(99,102,241,0.45) 100%);"></div>
-                    {{-- Logo on image --}}
-                    <div style="position:absolute;top:28px;left:32px;">
-                      <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:-0.5px;text-shadow:0 1px 3px rgba(0,0,0,0.3);">
-                        ✦ Self Note
-                      </span>
-                    </div>
-                    {{-- Tagline on image --}}
-                    <div style="position:absolute;bottom:28px;left:32px;right:32px;">
-                      <p style="margin:0;color:rgba(255,255,255,0.7);font-size:12px;letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">
-                        @yield('hero-label', 'Notification')
-                      </p>
-                      <h2 style="margin:4px 0 0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.8px;line-height:1.2;">
-                        @yield('hero-title', 'Hello')
-                      </h2>
-                    </div>
-                  </div>
-                </td>
-              </tr>
+                {{-- Logo bar --}}
+                <tr>
+                  <td style="padding:24px 32px 22px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                      <tr>
+                        <td valign="middle">
+                          {{-- Logo mark --}}
+                          <table cellpadding="0" cellspacing="0" role="presentation" style="display:inline-table;">
+                            <tr>
+                              <td valign="middle" style="background-color:#18181b;border-radius:8px;padding:6px 8px;line-height:0;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>
+                              </td>
+                              <td valign="middle" style="padding-left:8px;">
+                                <span style="font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:15px;font-weight:700;color:#18181b;letter-spacing:-0.3px;">Self Note</span>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td valign="middle" align="right">
+                          <span style="font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:12px;color:#a1a1aa;">{{ date('d M Y') }}</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-              {{-- Content --}}
-              <tr>
-                <td style="padding:36px 40px 40px;">
-                  @yield('content')
-                </td>
-              </tr>
+                {{-- Top divider --}}
+                <tr><td style="border-top:1px solid #f4f4f5;font-size:0;line-height:0;">&nbsp;</td></tr>
 
-              {{-- Card Footer --}}
-              <tr>
-                <td style="padding:20px 40px 28px;border-top:1px solid #f1f5f9;">
-                  <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.7;">
-                    Jika kamu tidak merasa melakukan permintaan ini, abaikan email ini — tidak ada yang akan berubah.
-                  </p>
-                </td>
-              </tr>
+                {{-- Main content --}}
+                <tr>
+                  <td style="padding:40px 32px 36px;">
+                    @yield('content')
+                  </td>
+                </tr>
 
+                {{-- Bottom divider --}}
+                <tr><td style="border-top:1px solid #f4f4f5;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+                {{-- Card footer --}}
+                <tr>
+                  <td style="padding:20px 32px 24px;">
+                    <p style="margin:0;font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:12px;color:#a1a1aa;line-height:1.6;">
+                      Jika kamu tidak merasa melakukan permintaan ini, abaikan email ini. Tidak ada perubahan yang akan terjadi pada akunmu.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
             </td>
           </tr>
 
           {{-- Footer --}}
           <tr>
             <td align="center" style="padding-top:28px;">
-              <p style="margin:0;font-size:12px;color:#94a3b8;">
-                <strong style="color:#64748b;">Self Note</strong>
-                &nbsp;&middot;&nbsp;
-                Your personal space to think and grow
+              <p style="margin:0;font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:12px;color:#71717a;line-height:1.8;">
+                <strong style="color:#52525b;">Self Note</strong> &nbsp;·&nbsp; Your personal space to think and grow
               </p>
-              <p style="margin:6px 0 0;font-size:11px;color:#cbd5e1;">
-                &copy; {{ date('Y') }} Self Note. All rights reserved.
+              <p style="margin:4px 0 0;font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:11px;color:#a1a1aa;">
+                © {{ date('Y') }} Self Note. All rights reserved.
               </p>
             </td>
           </tr>
