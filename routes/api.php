@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicNoteController;
@@ -17,6 +18,11 @@ Route::get('/public/notes/{token}', [PublicNoteController::class, 'show']);
 Route::prefix('auth')->controller(AuthController::class)->group(function () {
     Route::post('/register', 'register');
     Route::post('/login', 'login');
+});
+
+Route::prefix('auth')->controller(ForgotPasswordController::class)->group(function () {
+    Route::post('/forgot-password', 'sendResetLink');
+    Route::post('/reset-password', 'resetPassword');
 });
 
 /**
