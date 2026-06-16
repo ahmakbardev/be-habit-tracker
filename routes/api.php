@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\NoteController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicNoteController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +30,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('auth')->controller(AuthController::class)->group(function () {
         Route::post('/logout', 'logout');
         Route::get('/me', 'me');
+    });
+
+    /**
+     * Profile Routes
+     */
+    Route::prefix('profile')->controller(ProfileController::class)->group(function () {
+        Route::get('/', 'show');
+        Route::patch('/', 'update');
+        Route::post('/avatar', 'uploadAvatar');
+        Route::patch('/password', 'changePassword');
     });
 
     /**
