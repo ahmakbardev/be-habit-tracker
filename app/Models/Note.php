@@ -20,15 +20,25 @@ class Note extends Model
         'plain_text_preview',
         'highlight',
         'order_index',
+        'is_public',
+        'public_token',
     ];
 
-    /**
-     * Cast JSON content for easier access
-     */
     protected $casts = [
         'content' => 'array',
         'highlight' => 'boolean',
     ];
+
+    // Ensure these fields always appear in responses, even for old documents
+    protected $attributes = [
+        'is_public' => false,
+        'public_token' => null,
+    ];
+
+    public function getIsPublicAttribute($value): bool
+    {
+        return (bool) $value;
+    }
 
     /**
      * Cross-Database Relationship back to MySQL

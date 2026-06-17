@@ -1,8 +1,16 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\NoteController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicNoteController;
 use Illuminate\Support\Facades\Route;
+
+/**
+ * Public Note Pages (no auth)
+ */
+Route::get('/public/notes/{token}', [PublicNoteController::class, 'show']);
 
 /**
  * Auth API Routes (Public)
@@ -10,6 +18,11 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->controller(AuthController::class)->group(function () {
     Route::post('/register', 'register');
     Route::post('/login', 'login');
+});
+
+Route::prefix('auth')->controller(ForgotPasswordController::class)->group(function () {
+    Route::post('/forgot-password', 'sendOtp');
+    Route::post('/reset-password', 'resetPassword');
 });
 
 /**
@@ -23,6 +36,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('auth')->controller(AuthController::class)->group(function () {
         Route::post('/logout', 'logout');
         Route::get('/me', 'me');
+    });
+
+    /**
+     * Profile Routes
+     */
+    Route::prefix('profile')->controller(ProfileController::class)->group(function () {
+        Route::get('/', 'show');
+        Route::patch('/', 'update');
+        Route::post('/avatar', 'uploadAvatar');
+        Route::patch('/password', 'changePassword');
     });
 
     /**
@@ -41,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', 'storeNote');
         Route::patch('/{id}', 'updateNote');
         Route::post('/{id}/duplicate', 'duplicateNote');
+        Route::patch('/{id}/publish', 'togglePublish');
         Route::delete('/{id}', 'destroyNote');
         Route::post('/media/upload', [\App\Http\Controllers\MediaController::class, 'upload']);
     });
