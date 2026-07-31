@@ -15,22 +15,19 @@ class NoteWorkspace extends Model
     protected $connection = 'mysql';
 
     protected $fillable = [
-        'folder_id',
+        'user_id',
         'name',
         'icon_name',
         'order_index',
     ];
 
-    public function folder(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(NoteFolder::class, 'folder_id');
+        return $this->belongsTo(User::class);
     }
 
-    /**
-     * Cross-Database Relationship to MongoDB
-     */
-    public function notes(): HasMany
+    public function folders(): HasMany
     {
-        return $this->hasMany(Note::class, 'workspace_id');
+        return $this->hasMany(NoteFolder::class, 'workspace_id');
     }
 }

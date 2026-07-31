@@ -21,33 +21,33 @@ class NoteController extends Controller
         try {
             $user = $request->user();
 
-            // 1. Fetch Folders & Workspaces (MySQL)
-            $folders = NoteFolder::where('user_id', $user->id)
-                ->with(['workspaces'])
+            // 1. Fetch Workspaces & Folders (MySQL)
+            $workspaces = NoteWorkspace::where('user_id', $user->id)
+                ->with(['folders'])
                 ->orderBy('order_index')
                 ->get();
 
-            // 2. Optimization: Collect all workspace IDs to fetch notes in one go (Avoid N+1)
-            $workspaceIds = $folders->flatMap(function ($folder) {
-                return $folder->workspaces->pluck('id');
+            // 2. Optimization: Collect all folder IDs to fetch notes in one go (Avoid N+1)
+            $folderIds = $workspaces->flatMap(function ($workspace) {
+                return $workspace->folders->pluck('id');
             })->toArray();
 
             // 3. Fetch all Notes from MongoDB in one query
-            $allNotes = Note::whereIn('workspace_id', $workspaceIds)
+            $allNotes = Note::whereIn('folder_id', $folderIds)
                 ->orderBy('order_index')
                 ->get()
-                ->groupBy('workspace_id');
+                ->groupBy('folder_id');
 
-            // 4. Map notes back to their respective workspaces
-            foreach ($folders as $folder) {
-                foreach ($folder->workspaces as $workspace) {
-                    $workspace->setRelation('notes', $allNotes->get($workspace->id) ?? collect());
+            // 4. Map notes back to their respective folders
+            foreach ($workspaces as $workspace) {
+                foreach ($workspace->folders as $folder) {
+                    $folder->setRelation('notes', $allNotes->get($folder->id) ?? collect());
                 }
             }
 
             return response()->json([
                 'status' => 'success',
-                'data' => $folders
+                'data' => $workspaces
             ]);
         } catch (Exception $e) {
             Log::error('Notes Index Error: ' . $e->getMessage());
@@ -73,9 +73,9 @@ class NoteController extends Controller
                 ], 404);
             }
 
-            $workspace = NoteWorkspace::with('folder')->find($note->workspace_id);
-            if ($workspace) {
-                $note->setRelation('workspace', $workspace);
+            $folder = NoteFolder::with('workspace')->find($note->folder_id);
+            if ($folder) {
+                $note->setRelation('folder', $folder);
             }
 
             return response()->json([
@@ -107,12 +107,12 @@ class NoteController extends Controller
 
             $user = $request->user();
 
-            // Get user's workspace IDs to restrict search
-            $workspaceIds = NoteWorkspace::whereHas('folder', function($q) use ($user) {
+            // Get user's folder IDs to restrict search
+            $folderIds = NoteFolder::whereHas('workspace', function($q) use ($user) {
                 $q->where('user_id', $user->id);
             })->pluck('id')->toArray();
 
-            $notes = Note::whereIn('workspace_id', $workspaceIds)
+            $notes = Note::whereIn('folder_id', $folderIds)
                 ->where(function($q) use ($query) {
                     $q->where('title', 'LIKE', "%{$query}%")
                       ->orWhere('plain_text_preview', 'LIKE', "%{$query}%");
@@ -216,7 +216,7 @@ class NoteController extends Controller
     {
         try {
             $validated = $request->validate([
-                'workspace_id' => 'required|uuid|exists:note_workspaces,id',
+                'folder_id' => 'required|uuid|exists:note_folders,id',
                 'title' => 'required|string|max:255',
                 'content' => 'nullable|array',
                 'plain_text_preview' => 'nullable|string',
@@ -225,7 +225,7 @@ class NoteController extends Controller
             ]);
 
             $note = Note::create([
-                'workspace_id' => $validated['workspace_id'],
+                'folder_id' => $validated['folder_id'],
                 'title' => $validated['title'],
                 'content' => $validated['content'] ?? [],
                 'plain_text_preview' => $validated['plain_text_preview'] ?? '',
@@ -255,19 +255,20 @@ class NoteController extends Controller
     }
 
     /**
-     * Store a new Folder (MySQL)
+     * Store a new Folder (MySQL) — nested inside a Workspace
      */
     public function storeFolder(Request $request)
     {
         try {
             $validated = $request->validate([
+                'workspace_id' => 'required|uuid|exists:note_workspaces,id',
                 'name' => 'required|string|max:255',
                 'icon_name' => 'nullable|string|max:50',
                 'order_index' => 'nullable|integer',
             ]);
 
             $folder = NoteFolder::create([
-                'user_id' => $request->user()->id,
+                'workspace_id' => $validated['workspace_id'],
                 'name' => $validated['name'],
                 'icon_name' => $validated['icon_name'] ?? 'folder',
                 'order_index' => $validated['order_index'] ?? 0,
@@ -293,20 +294,19 @@ class NoteController extends Controller
     }
 
     /**
-     * Store a new Workspace (MySQL)
+     * Store a new Workspace (MySQL) — top-level, owned by the user
      */
     public function storeWorkspace(Request $request)
     {
         try {
             $validated = $request->validate([
-                'folder_id' => 'required|uuid|exists:note_folders,id',
                 'name' => 'required|string|max:255',
                 'icon_name' => 'nullable|string|max:50',
                 'order_index' => 'nullable|integer',
             ]);
 
             $workspace = NoteWorkspace::create([
-                'folder_id' => $validated['folder_id'],
+                'user_id' => $request->user()->id,
                 'name' => $validated['name'],
                 'icon_name' => $validated['icon_name'] ?? 'layout',
                 'order_index' => $validated['order_index'] ?? 0,

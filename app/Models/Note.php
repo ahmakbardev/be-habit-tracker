@@ -14,7 +14,7 @@ class Note extends Model
     protected $collection = 'notes';
 
     protected $fillable = [
-        'workspace_id',
+        'folder_id',
         'title',
         'content',
         'plain_text_preview',
@@ -43,8 +43,8 @@ class Note extends Model
     /**
      * Cross-Database Relationship back to MySQL
      */
-    public function workspace(): BelongsTo
+    public function folder(): BelongsTo
     {
-        return $this->belongsTo(NoteWorkspace::class, 'workspace_id');
+        return $this->belongsTo(NoteFolder::class, 'folder_id');
     }
 }
