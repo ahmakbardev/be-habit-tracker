@@ -14,6 +14,32 @@ use Exception;
 class NoteController extends Controller
 {
     /**
+     * Find a Folder by id, scoped to folders whose parent Workspace
+     * belongs to the given user. Returns null if it doesn't exist or
+     * isn't owned by that user.
+     */
+    private function findUserFolder(string $folderId, int $userId): ?NoteFolder
+    {
+        return NoteFolder::where('id', $folderId)
+            ->whereHas('workspace', fn($q) => $q->where('user_id', $userId))
+            ->first();
+    }
+
+    /**
+     * Find a Note by id, scoped to notes whose parent Folder's Workspace
+     * belongs to the given user. Returns null if it doesn't exist or
+     * isn't owned by that user.
+     */
+    private function findUserNote(string $noteId, int $userId): ?Note
+    {
+        $note = Note::find($noteId);
+        if (!$note || !$this->findUserFolder($note->folder_id, $userId)) {
+            return null;
+        }
+        return $note;
+    }
+
+    /**
      * Get all folders, workspaces, and notes for a user (Optimized)
      */
     public function index(Request $request)
@@ -61,10 +87,10 @@ class NoteController extends Controller
     /**
      * Get detail of a single Note
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         try {
-            $note = Note::find($id);
+            $note = $this->findUserNote($id, $request->user()->id);
 
             if (!$note) {
                 return response()->json([
@@ -138,7 +164,7 @@ class NoteController extends Controller
     public function togglePublish(Request $request, $id)
     {
         try {
-            $note = Note::find($id);
+            $note = $this->findUserNote($id, $request->user()->id);
             if (!$note) {
                 return response()->json([
                     'status' => 'error',
@@ -175,10 +201,10 @@ class NoteController extends Controller
     /**
      * Duplicate a Note (MongoDB)
      */
-    public function duplicateNote($id)
+    public function duplicateNote(Request $request, $id)
     {
         try {
-            $note = Note::find($id);
+            $note = $this->findUserNote($id, $request->user()->id);
             if (!$note) {
                 return response()->json([
                     'status' => 'error',
@@ -224,6 +250,14 @@ class NoteController extends Controller
                 'order_index' => 'nullable|integer',
             ]);
 
+            $folder = $this->findUserFolder($validated['folder_id'], $request->user()->id);
+            if (!$folder) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Folder not found.'
+                ], 404);
+            }
+
             $note = Note::create([
                 'folder_id' => $validated['folder_id'],
                 'title' => $validated['title'],
@@ -266,6 +300,16 @@ class NoteController extends Controller
                 'icon_name' => 'nullable|string|max:50',
                 'order_index' => 'nullable|integer',
             ]);
+
+            $workspace = NoteWorkspace::where('id', $validated['workspace_id'])
+                ->where('user_id', $request->user()->id)
+                ->first();
+            if (!$workspace) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Workspace not found.'
+                ], 404);
+            }
 
             $folder = NoteFolder::create([
                 'workspace_id' => $validated['workspace_id'],
@@ -337,7 +381,7 @@ class NoteController extends Controller
     public function updateNote(Request $request, $id)
     {
         try {
-            $note = Note::find($id);
+            $note = $this->findUserNote($id, $request->user()->id);
             if (!$note) {
                 return response()->json([
                     'status' => 'error',
@@ -385,7 +429,7 @@ class NoteController extends Controller
     public function updateFolder(Request $request, $id)
     {
         try {
-            $folder = NoteFolder::find($id);
+            $folder = $this->findUserFolder($id, $request->user()->id);
             if (!$folder) {
                 return response()->json([
                     'status' => 'error',
@@ -427,7 +471,9 @@ class NoteController extends Controller
     public function updateWorkspace(Request $request, $id)
     {
         try {
-            $workspace = NoteWorkspace::find($id);
+            $workspace = NoteWorkspace::where('id', $id)
+                ->where('user_id', $request->user()->id)
+                ->first();
             if (!$workspace) {
                 return response()->json([
                     'status' => 'error',
@@ -466,10 +512,10 @@ class NoteController extends Controller
     /**
      * Delete a Note (MongoDB)
      */
-    public function destroyNote($id)
+    public function destroyNote(Request $request, $id)
     {
         try {
-            $note = Note::find($id);
+            $note = $this->findUserNote($id, $request->user()->id);
             if (!$note) {
                 return response()->json([
                     'status' => 'error',
@@ -494,10 +540,10 @@ class NoteController extends Controller
     /**
      * Delete a Folder (MySQL)
      */
-    public function destroyFolder($id)
+    public function destroyFolder(Request $request, $id)
     {
         try {
-            $folder = NoteFolder::find($id);
+            $folder = $this->findUserFolder($id, $request->user()->id);
             if (!$folder) {
                 return response()->json([
                     'status' => 'error',
@@ -522,10 +568,12 @@ class NoteController extends Controller
     /**
      * Delete a Workspace (MySQL)
      */
-    public function destroyWorkspace($id)
+    public function destroyWorkspace(Request $request, $id)
     {
         try {
-            $workspace = NoteWorkspace::find($id);
+            $workspace = NoteWorkspace::where('id', $id)
+                ->where('user_id', $request->user()->id)
+                ->first();
             if (!$workspace) {
                 return response()->json([
                     'status' => 'error',
