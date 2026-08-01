@@ -39,6 +39,15 @@ class ProfileController extends Controller
                     'bio'        => $user->bio,
                     'avatar_url' => $user->avatar_url,
                     'member_since' => $user->created_at,
+                    'last_edited'  => $user->updated_at,
+                    'job_title'       => $user->job_title,
+                    'company'         => $user->company,
+                    'phone_mobile'    => $user->phone_mobile,
+                    'phone_work'      => $user->phone_work,
+                    'mailing_address' => $user->mailing_address,
+                    'timezone'        => $user->timezone,
+                    'birthday'        => $user->birthday,
+                    'tags'            => $user->tags ?? [],
                     'stats' => [
                         'notes'  => $noteCount,
                         'habits' => $habitCount,
@@ -61,9 +70,18 @@ class ProfileController extends Controller
             $user = $request->user();
 
             $validated = $request->validate([
-                'name'     => 'sometimes|string|max:255',
-                'username' => 'sometimes|string|max:50|alpha_dash|unique:users,username,' . $user->id,
-                'bio'      => 'sometimes|nullable|string|max:500',
+                'name'             => 'sometimes|string|max:255',
+                'username'         => 'sometimes|string|max:50|alpha_dash|unique:users,username,' . $user->id,
+                'bio'              => 'sometimes|nullable|string|max:500',
+                'job_title'        => 'sometimes|nullable|string|max:100',
+                'company'          => 'sometimes|nullable|string|max:150',
+                'phone_mobile'     => 'sometimes|nullable|string|max:30',
+                'phone_work'       => 'sometimes|nullable|string|max:30',
+                'mailing_address'  => 'sometimes|nullable|string|max:500',
+                'timezone'         => 'sometimes|nullable|string|max:100',
+                'birthday'         => 'sometimes|nullable|date',
+                'tags'             => 'sometimes|nullable|array',
+                'tags.*'           => 'string|max:50',
             ]);
 
             $user->update($validated);
@@ -78,6 +96,15 @@ class ProfileController extends Controller
                     'email'      => $user->email,
                     'bio'        => $user->bio,
                     'avatar_url' => $user->avatar_url,
+                    'job_title'       => $user->job_title,
+                    'company'         => $user->company,
+                    'phone_mobile'    => $user->phone_mobile,
+                    'phone_work'      => $user->phone_work,
+                    'mailing_address' => $user->mailing_address,
+                    'timezone'        => $user->timezone,
+                    'birthday'        => $user->birthday,
+                    'tags'            => $user->tags ?? [],
+                    'last_edited'     => $user->updated_at,
                 ],
             ]);
         } catch (ValidationException $e) {
