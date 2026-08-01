@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Task extends Model
 {
@@ -22,6 +24,7 @@ class Task extends Model
         'due_date',
         'tags',
         'linked_note_id',
+        'progress',
         'order_index',
     ];
 
@@ -29,6 +32,7 @@ class Task extends Model
         'start_date' => 'datetime',
         'due_date' => 'datetime',
         'tags' => 'array',
+        'progress' => 'integer',
     ];
 
     public function project(): BelongsTo
@@ -41,11 +45,36 @@ class Task extends Model
         return $this->belongsTo(TaskColumn::class, 'column_id');
     }
 
+    public function subtasks(): HasMany
+    {
+        return $this->hasMany(TaskSubtask::class)->orderBy('order_index');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TaskAttachment::class)->latest();
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(TaskComment::class)->latest();
+    }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(TaskActivity::class)->latest();
+    }
+
+    public function assignees(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'task_assignees');
+    }
+
     /**
-     * Get the user that owns the task (through project and folder)
+     * Get the user that owns the task (through project and workspace)
      */
     public function getUserAttribute()
     {
-        return $this->project?->folder?->user;
+        return $this->project?->workspace?->user;
     }
 }

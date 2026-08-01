@@ -14,7 +14,7 @@ class TaskProject extends Model
     protected $connection = 'mysql';
 
     protected $fillable = [
-        'folder_id',
+        'workspace_id',
         'name',
         'description',
         'icon_name',
@@ -31,9 +31,9 @@ class TaskProject extends Model
         'metadata' => 'array',
     ];
 
-    public function folder(): BelongsTo
+    public function workspace(): BelongsTo
     {
-        return $this->belongsTo(TaskFolder::class, 'folder_id');
+        return $this->belongsTo(NoteWorkspace::class, 'workspace_id');
     }
 
     public function columns(): HasMany

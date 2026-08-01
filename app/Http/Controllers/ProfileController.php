@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Habit;
 use App\Models\Note;
 use App\Models\NoteFolder;
-use App\Models\TaskFolder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -26,7 +25,7 @@ class ProfileController extends Controller
 
             $noteCount  = Note::whereIn('folder_id', $folderIds)->count();
             $habitCount = Habit::where('user_id', $user->id)->count();
-            $taskCount  = \App\Models\Task::whereHas('project.folder', function ($q) use ($user) {
+            $taskCount  = \App\Models\Task::whereHas('project.workspace', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             })->count();
 
