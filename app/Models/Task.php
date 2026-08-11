@@ -50,6 +50,15 @@ class Task extends Model
         return $this->hasMany(TaskSubtask::class)->orderBy('order_index');
     }
 
+    /**
+     * Raw pivot rows only — note_id points into MongoDB, so the actual
+     * Note documents are resolved manually (see TaskController::resolveTaskNotes).
+     */
+    public function taskNotes(): HasMany
+    {
+        return $this->hasMany(TaskNote::class);
+    }
+
     public function attachments(): HasMany
     {
         return $this->hasMany(TaskAttachment::class)->latest();

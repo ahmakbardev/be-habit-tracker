@@ -7,10 +7,14 @@ use App\Models\TaskActivity;
 use App\Models\TaskAttachment;
 use App\Models\TaskColumn;
 use App\Models\TaskComment;
+use App\Models\TaskNote;
 use App\Models\TaskProject;
 use App\Models\TaskSubtask;
+use App\Models\Note;
+use App\Models\NoteFolder;
 use App\Models\NoteWorkspace;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -44,9 +48,68 @@ class TaskController extends Controller
         return $task;
     }
 
+    /**
+     * Find a Note by id, scoped to notes whose parent Folder's Workspace
+     * belongs to the given user. Mirrors NoteController::findUserNote.
+     */
+    private function findUserNote(string $noteId, int $userId): ?Note
+    {
+        $note = Note::find($noteId);
+        if (!$note) {
+            return null;
+        }
+        $folder = NoteFolder::where('id', $note->folder_id)
+            ->whereHas('workspace', fn($q) => $q->where('user_id', $userId))
+            ->first();
+        return $folder ? $note : null;
+    }
+
     private function loadTask(Task $task): Task
     {
-        return $task->load(['subtasks', 'attachments', 'comments.user', 'activities', 'assignees']);
+        $task->load(['subtasks.assignee', 'attachments', 'comments.user', 'activities', 'assignees']);
+        $this->attachTaskNotes(collect([$task]));
+        return $task;
+    }
+
+    /**
+     * Resolve each task's linked Notes and set them as a 'notes' attribute.
+     * Notes live in MongoDB, so this can't be a normal Eloquent eager load
+     * (no cross-database joins) — pivot rows are read from MySQL, then the
+     * actual Note documents and their parent Folder (for workspace_id) are
+     * bulk-fetched separately and stitched together in PHP.
+     */
+    private function attachTaskNotes(Collection $tasks): void
+    {
+        if ($tasks->isEmpty()) {
+            return;
+        }
+
+        $pivotsByTask = TaskNote::whereIn('task_id', $tasks->pluck('id'))->get()->groupBy('task_id');
+
+        $noteIds = $pivotsByTask->flatten()->pluck('note_id')->unique()->values();
+        $notes = $noteIds->isEmpty() ? collect() : Note::whereIn('id', $noteIds)->get()->keyBy('id');
+
+        $folderIds = $notes->pluck('folder_id')->filter()->unique()->values();
+        $folders = $folderIds->isEmpty() ? collect() : NoteFolder::whereIn('id', $folderIds)->get()->keyBy('id');
+
+        $tasks->each(function (Task $task) use ($pivotsByTask, $notes, $folders) {
+            $rows = $pivotsByTask->get($task->id, collect());
+            $resolved = $rows->map(function (TaskNote $pivot) use ($notes, $folders) {
+                $note = $notes->get($pivot->note_id);
+                if (!$note) {
+                    return null; // dangling reference — the note was deleted
+                }
+                $folder = $folders->get($note->folder_id);
+                return [
+                    'id' => $pivot->id,
+                    'note_id' => $note->id,
+                    'title' => $note->title,
+                    'folder_id' => $note->folder_id,
+                    'workspace_id' => $folder?->workspace_id,
+                ];
+            })->filter()->values();
+            $task->setAttribute('notes', $resolved);
+        });
     }
 
     /**
@@ -121,7 +184,9 @@ class TaskController extends Controller
                 $q->orderBy('order_index');
             }, 'columns.tasks' => function ($q) {
                 $q->orderBy('order_index');
-            }, 'columns.tasks.subtasks', 'columns.tasks.attachments', 'columns.tasks.comments.user', 'columns.tasks.activities', 'columns.tasks.assignees']);
+            }, 'columns.tasks.subtasks.assignee', 'columns.tasks.attachments', 'columns.tasks.comments.user', 'columns.tasks.activities', 'columns.tasks.assignees']);
+
+            $this->attachTaskNotes($project->columns->flatMap->tasks);
 
             return response()->json([
                 'status' => 'success',
@@ -497,11 +562,17 @@ class TaskController extends Controller
 
             $validated = $request->validate([
                 'title' => 'required|string|max:255',
+                'priority' => 'nullable|in:low,medium,high',
+                'due_date' => 'nullable|date',
+                'assignee_id' => 'nullable|exists:users,id',
             ]);
 
             $subtask = TaskSubtask::create([
                 'task_id' => $task->id,
                 'title' => $validated['title'],
+                'priority' => $validated['priority'] ?? null,
+                'due_date' => $validated['due_date'] ?? null,
+                'assignee_id' => $validated['assignee_id'] ?? null,
                 'order_index' => $task->subtasks()->count(),
             ]);
 
@@ -544,6 +615,9 @@ class TaskController extends Controller
             $validated = $request->validate([
                 'title' => 'sometimes|string|max:255',
                 'completed' => 'sometimes|boolean',
+                'priority' => 'sometimes|nullable|in:low,medium,high',
+                'due_date' => 'sometimes|nullable|date',
+                'assignee_id' => 'sometimes|nullable|exists:users,id',
             ]);
 
             $subtask->update($validated);
@@ -600,6 +674,155 @@ class TaskController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete subtask.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Attach an existing Note (from the same Workspace) to a Task.
+     */
+    public function storeTaskNote(Request $request, $taskId)
+    {
+        try {
+            $task = $this->findUserTask($taskId, $request->user()->id);
+            if (!$task) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Task not found.'
+                ], 404);
+            }
+
+            $validated = $request->validate([
+                'note_id' => 'required|string',
+            ]);
+
+            $note = $this->findUserNote($validated['note_id'], $request->user()->id);
+            if (!$note) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Note not found.'
+                ], 404);
+            }
+
+            $taskNote = TaskNote::firstOrCreate([
+                'task_id' => $task->id,
+                'note_id' => $note->id,
+            ]);
+
+            if ($taskNote->wasRecentlyCreated) {
+                TaskActivity::create(['task_id' => $task->id, 'message' => "Note \"{$note->title}\" attached"]);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $this->loadTask($task)
+            ], 201);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (Exception $e) {
+            Log::error('Store Task Note Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Could not attach note.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Detach a Note from a Task (does not delete the Note itself).
+     */
+    public function destroyTaskNote(Request $request, $id)
+    {
+        try {
+            $taskNote = TaskNote::find($id);
+            $task = $taskNote ? $this->findUserTask($taskNote->task_id, $request->user()->id) : null;
+            if (!$taskNote || !$task) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Linked note not found.'
+                ], 404);
+            }
+
+            $note = Note::find($taskNote->note_id);
+            $taskNote->delete();
+            if ($note) {
+                TaskActivity::create(['task_id' => $task->id, 'message' => "Note \"{$note->title}\" removed"]);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $this->loadTask($task)
+            ]);
+        } catch (Exception $e) {
+            Log::error('Destroy Task Note Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to remove note.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Promote a Subtask into a standalone Task in the same Project (first
+     * column), carrying over its title/priority/due date/assignee, then
+     * remove the subtask.
+     */
+    public function convertSubtask(Request $request, $id)
+    {
+        try {
+            $subtask = TaskSubtask::find($id);
+            $task = $subtask ? $this->findUserTask($subtask->task_id, $request->user()->id) : null;
+            if (!$subtask || !$task) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Subtask not found.'
+                ], 404);
+            }
+
+            $firstColumn = TaskColumn::where('project_id', $task->project_id)
+                ->orderBy('order_index')
+                ->first();
+            if (!$firstColumn) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'This project has no columns to place the new task in.'
+                ], 422);
+            }
+
+            $newTask = Task::create([
+                'project_id' => $task->project_id,
+                'column_id' => $firstColumn->id,
+                'title' => $subtask->title,
+                'priority' => $subtask->priority ?? 'medium',
+                'due_date' => $subtask->due_date,
+                'order_index' => Task::where('column_id', $firstColumn->id)->count(),
+            ]);
+            TaskActivity::create(['task_id' => $newTask->id, 'message' => "Created by converting subtask from \"{$task->title}\""]);
+
+            if ($subtask->assignee_id) {
+                $newTask->assignees()->attach($subtask->assignee_id);
+            }
+
+            $title = $subtask->title;
+            $subtask->delete();
+            TaskActivity::create(['task_id' => $task->id, 'message' => "Subtask \"{$title}\" converted to a task"]);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'task' => $this->loadTask($task),
+                    'created_task' => $this->loadTask($newTask),
+                ]
+            ], 201);
+        } catch (Exception $e) {
+            Log::error('Convert Subtask Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to convert subtask.'
             ], 500);
         }
     }

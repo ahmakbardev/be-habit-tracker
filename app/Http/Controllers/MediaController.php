@@ -25,6 +25,7 @@ class MediaController extends Controller
             $file = $request->file('file');
             $mediaUrl = config('services.media.url');
             $projectId = config('services.media.project_id');
+            $apiKey = config('services.media.project_api_key');
 
             // If project_id is not set, we might need to find or create it
             if (!$projectId) {
@@ -33,17 +34,20 @@ class MediaController extends Controller
                 if ($response->successful()) {
                     $projects = $response->json();
                     $projectName = config('services.media.project_name', 'habit-tracker');
-                    
+
                     $found = collect($projects)->firstWhere('name', $projectName);
                     if ($found) {
                         $projectId = $found['id'];
+                        $apiKey = $found['api_key'] ?? $apiKey;
                     } else {
                         // Create project
                         $createRes = Http::post($mediaUrl . '/api/projects', [
                             'name' => $projectName
                         ]);
                         if ($createRes->successful()) {
-                            $projectId = $createRes->json()['id'];
+                            $created = $createRes->json();
+                            $projectId = $created['id'];
+                            $apiKey = $created['api_key'] ?? $apiKey;
                         }
                     }
                 }
@@ -56,11 +60,16 @@ class MediaController extends Controller
                 ], 500);
             }
 
-            // Proxy the upload to media platform
+            // Proxy the upload to media platform. api_key is required here —
+            // without it the platform's bot-protection challenges the
+            // request (returns an HTML reCAPTCHA page) instead of accepting
+            // the upload, even though project_id alone is enough for the
+            // read-only /api/projects lookup above.
             $response = Http::attach(
                 'file', file_get_contents($file->getRealPath()), $file->getClientOriginalName()
             )->post($mediaUrl . '/api/files/upload', [
                 'project_id' => $projectId,
+                'api_key' => $apiKey,
                 'is_public' => 'true'
             ]);
 
