@@ -101,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{taskId}/subtasks', 'storeSubtask');
         Route::patch('/subtasks/{id}', 'updateSubtask');
         Route::delete('/subtasks/{id}', 'destroySubtask');
+        Route::post('/subtasks/{id}/convert', 'convertSubtask');
 
         Route::post('/{taskId}/comments', 'storeComment');
         Route::patch('/comments/{id}', 'updateComment');
@@ -108,6 +109,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/{taskId}/attachments', 'storeAttachment');
         Route::delete('/attachments/{id}', 'destroyAttachment');
+
+        Route::post('/{taskId}/notes', 'storeTaskNote');
+        Route::delete('/notes/{id}', 'destroyTaskNote');
 
         Route::post('/{taskId}/assignees', 'addAssignee');
         Route::delete('/{taskId}/assignees/{userId}', 'removeAssignee');

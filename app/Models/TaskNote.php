@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class TaskSubtask extends Model
+class TaskNote extends Model
 {
     use HasUuids;
 
@@ -14,26 +14,11 @@ class TaskSubtask extends Model
 
     protected $fillable = [
         'task_id',
-        'title',
-        'completed',
-        'order_index',
-        'priority',
-        'due_date',
-        'assignee_id',
-    ];
-
-    protected $casts = [
-        'completed' => 'boolean',
-        'due_date' => 'datetime',
+        'note_id',
     ];
 
     public function task(): BelongsTo
     {
         return $this->belongsTo(Task::class);
-    }
-
-    public function assignee(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'assignee_id');
     }
 }
