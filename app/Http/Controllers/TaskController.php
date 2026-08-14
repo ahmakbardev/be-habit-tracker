@@ -72,6 +72,26 @@ class TaskController extends Controller
     }
 
     /**
+     * Recompute a task's progress from its subtasks' completion ratio.
+     * A task with no subtasks keeps whatever progress was set manually —
+     * subtasks only take over once they exist.
+     */
+    private function syncProgressFromSubtasks(Task $task): void
+    {
+        $total = $task->subtasks()->count();
+        if ($total === 0) {
+            return;
+        }
+
+        $completed = $task->subtasks()->where('completed', true)->count();
+        $progress = (int) round(($completed / $total) * 100);
+
+        if ($progress !== (int) $task->progress) {
+            $task->update(['progress' => $progress]);
+        }
+    }
+
+    /**
      * Resolve each task's linked Notes and set them as a 'notes' attribute.
      * Notes live in MongoDB, so this can't be a normal Eloquent eager load
      * (no cross-database joins) — pivot rows are read from MySQL, then the
@@ -421,6 +441,13 @@ class TaskController extends Controller
                 ], 422);
             }
 
+            // Once a task has subtasks, its progress is derived from their
+            // completion ratio (see syncProgressFromSubtasks) — manual
+            // overrides are only allowed before any subtask exists.
+            if (array_key_exists('progress', $validated) && $task->subtasks()->count() > 0) {
+                unset($validated['progress']);
+            }
+
             $this->logFieldChanges($task, $validated);
 
             $task->update($validated);
@@ -577,6 +604,7 @@ class TaskController extends Controller
             ]);
 
             TaskActivity::create(['task_id' => $task->id, 'message' => "Subtask \"{$subtask->title}\" added"]);
+            $this->syncProgressFromSubtasks($task);
 
             return response()->json([
                 'status' => 'success',
@@ -626,6 +654,7 @@ class TaskController extends Controller
                 $state = $validated['completed'] ? 'complete' : 'incomplete';
                 TaskActivity::create(['task_id' => $task->id, 'message' => "Subtask \"{$subtask->title}\" marked {$state}"]);
             }
+            $this->syncProgressFromSubtasks($task);
 
             return response()->json([
                 'status' => 'success',
@@ -664,6 +693,7 @@ class TaskController extends Controller
             $title = $subtask->title;
             $subtask->delete();
             TaskActivity::create(['task_id' => $task->id, 'message' => "Subtask \"{$title}\" removed"]);
+            $this->syncProgressFromSubtasks($task);
 
             return response()->json([
                 'status' => 'success',
@@ -810,6 +840,7 @@ class TaskController extends Controller
             $title = $subtask->title;
             $subtask->delete();
             TaskActivity::create(['task_id' => $task->id, 'message' => "Subtask \"{$title}\" converted to a task"]);
+            $this->syncProgressFromSubtasks($task);
 
             return response()->json([
                 'status' => 'success',
