@@ -999,7 +999,9 @@ class TaskController extends Controller
 
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
-                'url' => 'required|string',
+                // Only http(s) is allowed — anything else (javascript:, data:, etc.)
+                // would execute in the app's own origin when a viewer opens it later.
+                'url' => 'required|string|regex:/^https?:\/\//i',
                 'type' => 'nullable|string|in:file,url',
                 'extension' => 'nullable|string|max:20',
                 'size' => 'nullable|integer',
