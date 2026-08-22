@@ -1000,9 +1000,12 @@ class TaskController extends Controller
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'url' => 'required|string',
+                'type' => 'nullable|string|in:file,url',
                 'extension' => 'nullable|string|max:20',
                 'size' => 'nullable|integer',
             ]);
+
+            $validated['type'] = $validated['type'] ?? 'file';
 
             TaskAttachment::create(array_merge($validated, ['task_id' => $task->id]));
             TaskActivity::create(['task_id' => $task->id, 'message' => "Attachment \"{$validated['name']}\" added"]);
