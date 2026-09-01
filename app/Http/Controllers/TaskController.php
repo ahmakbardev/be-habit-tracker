@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Note;
+use App\Models\NoteFolder;
+use App\Models\NoteWorkspace;
 use App\Models\Task;
 use App\Models\TaskActivity;
 use App\Models\TaskAttachment;
@@ -10,15 +13,13 @@ use App\Models\TaskComment;
 use App\Models\TaskNote;
 use App\Models\TaskProject;
 use App\Models\TaskSubtask;
-use App\Models\Note;
-use App\Models\NoteFolder;
-use App\Models\NoteWorkspace;
+use Carbon\Carbon;
+use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-use Exception;
 
 class TaskController extends Controller
 {
@@ -30,7 +31,7 @@ class TaskController extends Controller
     private function findUserProject(string $projectId, int $userId): ?TaskProject
     {
         return TaskProject::where('id', $projectId)
-            ->whereHas('workspace', fn($q) => $q->where('user_id', $userId))
+            ->whereHas('workspace', fn ($q) => $q->where('user_id', $userId))
             ->first();
     }
 
@@ -42,9 +43,10 @@ class TaskController extends Controller
     private function findUserTask(string $taskId, int $userId): ?Task
     {
         $task = Task::find($taskId);
-        if (!$task || !$this->findUserProject($task->project_id, $userId)) {
+        if (! $task || ! $this->findUserProject($task->project_id, $userId)) {
             return null;
         }
+
         return $task;
     }
 
@@ -55,12 +57,13 @@ class TaskController extends Controller
     private function findUserNote(string $noteId, int $userId): ?Note
     {
         $note = Note::find($noteId);
-        if (!$note) {
+        if (! $note) {
             return null;
         }
         $folder = NoteFolder::where('id', $note->folder_id)
-            ->whereHas('workspace', fn($q) => $q->where('user_id', $userId))
+            ->whereHas('workspace', fn ($q) => $q->where('user_id', $userId))
             ->first();
+
         return $folder ? $note : null;
     }
 
@@ -68,6 +71,7 @@ class TaskController extends Controller
     {
         $task->load(['subtasks.assignee', 'attachments', 'comments.user', 'activities', 'assignees']);
         $this->attachTaskNotes(collect([$task]));
+
         return $task;
     }
 
@@ -116,10 +120,11 @@ class TaskController extends Controller
             $rows = $pivotsByTask->get($task->id, collect());
             $resolved = $rows->map(function (TaskNote $pivot) use ($notes, $folders) {
                 $note = $notes->get($pivot->note_id);
-                if (!$note) {
+                if (! $note) {
                     return null; // dangling reference — the note was deleted
                 }
                 $folder = $folders->get($note->folder_id);
+
                 return [
                     'id' => $pivot->id,
                     'note_id' => $note->id,
@@ -149,10 +154,10 @@ class TaskController extends Controller
     {
         try {
             $workspaceId = $request->query('workspace_id');
-            if (!$workspaceId) {
+            if (! $workspaceId) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'workspace_id is required.'
+                    'message' => 'workspace_id is required.',
                 ], 422);
             }
 
@@ -160,10 +165,10 @@ class TaskController extends Controller
                 ->where('user_id', $request->user()->id)
                 ->first();
 
-            if (!$workspace) {
+            if (! $workspace) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Workspace not found.'
+                    'message' => 'Workspace not found.',
                 ], 404);
             }
 
@@ -174,13 +179,91 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $projects
+                'data' => $projects,
             ]);
         } catch (Exception $e) {
-            Log::error('Tasks Index Error: ' . $e->getMessage());
+            Log::error('Tasks Index Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to fetch task projects.'
+                'message' => 'Failed to fetch task projects.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Column titles treated as "done" for the purposes of the cross-project
+     * active-tasks overview. Matches the default "Done" column created for
+     * every new project; a column with a different title but the same intent
+     * (renamed by the user) is matched case-insensitively.
+     */
+    private const DONE_COLUMN_TITLES = ['done', 'completed', 'complete', 'finished', 'selesai', 'closed', 'cancelled', 'canceled'];
+
+    /**
+     * Flat list of not-yet-done tasks across every Project in every
+     * Workspace owned by the user — powers the "quick board" shortcut shown
+     * on the Tasks index before a workspace/project is picked. Each task is
+     * annotated with its parent project & workspace so the UI can flag them.
+     */
+    public function activeOverview(Request $request)
+    {
+        try {
+            $userId = $request->user()->id;
+
+            $projects = TaskProject::whereHas('workspace', fn ($q) => $q->where('user_id', $userId))
+                ->with([
+                    'workspace:id,name,icon_name',
+                    'columns' => fn ($q) => $q->orderBy('order_index'),
+                    'columns.tasks' => fn ($q) => $q->orderBy('order_index'),
+                    'columns.tasks.assignees',
+                ])
+                ->get();
+
+            $tasks = collect();
+            foreach ($projects as $project) {
+                foreach ($project->columns as $column) {
+                    if (in_array(strtolower(trim($column->title)), self::DONE_COLUMN_TITLES, true)) {
+                        continue;
+                    }
+                    foreach ($column->tasks as $task) {
+                        $tasks->push([
+                            'id' => $task->id,
+                            'title' => $task->title,
+                            'description' => $task->description,
+                            'priority' => $task->priority,
+                            'start_date' => $task->start_date,
+                            'due_date' => $task->due_date,
+                            'tags' => $task->tags,
+                            'column_id' => $column->id,
+                            'column_title' => $column->title,
+                            'project_id' => $project->id,
+                            'project_name' => $project->name,
+                            'project_icon_name' => $project->icon_name,
+                            'workspace_id' => $project->workspace_id,
+                            'workspace_name' => $project->workspace?->name,
+                            'workspace_icon_name' => $project->workspace?->icon_name,
+                            'assignees' => $task->assignees->map(fn ($u) => [
+                                'id' => $u->id,
+                                'name' => $u->name,
+                                'avatar_url' => $u->avatar_url,
+                            ])->values(),
+                        ]);
+                    }
+                }
+            }
+
+            $sorted = $tasks->sortBy(fn ($t) => $t['due_date']?->timestamp ?? PHP_INT_MAX)->values();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $sorted,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Tasks Active Overview Error: '.$e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch active tasks overview.',
             ], 500);
         }
     }
@@ -193,10 +276,10 @@ class TaskController extends Controller
         try {
             $project = $this->findUserProject($id, $request->user()->id);
 
-            if (!$project) {
+            if (! $project) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Project not found.'
+                    'message' => 'Project not found.',
                 ], 404);
             }
 
@@ -210,13 +293,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $project
+                'data' => $project,
             ]);
         } catch (Exception $e) {
-            Log::error('Show Project Error: ' . $e->getMessage());
+            Log::error('Show Project Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to fetch project detail.'
+                'message' => 'Failed to fetch project detail.',
             ], 500);
         }
     }
@@ -238,10 +322,10 @@ class TaskController extends Controller
                 $workspace = NoteWorkspace::where('id', $validated['workspace_id'])
                     ->where('user_id', $request->user()->id)
                     ->first();
-                if (!$workspace) {
+                if (! $workspace) {
                     return response()->json([
                         'status' => 'error',
-                        'message' => 'Workspace not found.'
+                        'message' => 'Workspace not found.',
                     ], 404);
                 }
 
@@ -259,19 +343,20 @@ class TaskController extends Controller
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Project created with default columns',
-                    'data' => $project->load('columns')
+                    'data' => $project->load('columns'),
                 ], 201);
             } catch (ValidationException $e) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Validation failed',
-                    'errors' => $e->errors()
+                    'errors' => $e->errors(),
                 ], 422);
             } catch (Exception $e) {
-                Log::error('Store Project Error: ' . $e->getMessage());
+                Log::error('Store Project Error: '.$e->getMessage());
+
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Could not create project.'
+                    'message' => 'Could not create project.',
                 ], 500);
             }
         });
@@ -284,10 +369,10 @@ class TaskController extends Controller
     {
         try {
             $project = $this->findUserProject($id, $request->user()->id);
-            if (!$project) {
+            if (! $project) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Project not found.'
+                    'message' => 'Project not found.',
                 ], 404);
             }
 
@@ -307,19 +392,20 @@ class TaskController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Project updated successfully',
-                'data' => $project
+                'data' => $project,
             ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Update Project Error: ' . $e->getMessage());
+            Log::error('Update Project Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to update project.'
+                'message' => 'Failed to update project.',
             ], 500);
         }
     }
@@ -331,10 +417,10 @@ class TaskController extends Controller
     {
         try {
             $project = $this->findUserProject($id, $request->user()->id);
-            if (!$project) {
+            if (! $project) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Project not found.'
+                    'message' => 'Project not found.',
                 ], 404);
             }
 
@@ -342,13 +428,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Project deleted successfully'
+                'message' => 'Project deleted successfully',
             ]);
         } catch (Exception $e) {
-            Log::error('Destroy Project Error: ' . $e->getMessage());
+            Log::error('Destroy Project Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete project.'
+                'message' => 'Failed to delete project.',
             ], 500);
         }
     }
@@ -371,17 +458,17 @@ class TaskController extends Controller
             ]);
 
             $project = $this->findUserProject($validated['project_id'], $request->user()->id);
-            if (!$project) {
+            if (! $project) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Project not found.'
+                    'message' => 'Project not found.',
                 ], 404);
             }
 
-            if (!$this->columnBelongsToProject($validated['column_id'], $project->id)) {
+            if (! $this->columnBelongsToProject($validated['column_id'], $project->id)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Column does not belong to this project.'
+                    'message' => 'Column does not belong to this project.',
                 ], 422);
             }
 
@@ -390,19 +477,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Store Task Error: ' . $e->getMessage());
+            Log::error('Store Task Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Could not create task.'
+                'message' => 'Could not create task.',
             ], 500);
         }
     }
@@ -415,10 +503,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($id, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -434,10 +522,10 @@ class TaskController extends Controller
                 'order_index' => 'sometimes|integer',
             ]);
 
-            if (array_key_exists('column_id', $validated) && !$this->columnBelongsToProject($validated['column_id'], $task->project_id)) {
+            if (array_key_exists('column_id', $validated) && ! $this->columnBelongsToProject($validated['column_id'], $task->project_id)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Column does not belong to this task\'s project.'
+                    'message' => 'Column does not belong to this task\'s project.',
                 ], 422);
             }
 
@@ -455,19 +543,20 @@ class TaskController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Task updated successfully',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Update Task Error: ' . $e->getMessage());
+            Log::error('Update Task Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to update task.'
+                'message' => 'Failed to update task.',
             ], 500);
         }
     }
@@ -480,7 +569,7 @@ class TaskController extends Controller
             $messages[] = "Title changed to \"{$validated['title']}\"";
         }
         if (array_key_exists('priority', $validated) && $validated['priority'] !== $task->priority) {
-            $messages[] = 'Priority changed to ' . ucfirst($validated['priority']);
+            $messages[] = 'Priority changed to '.ucfirst($validated['priority']);
         }
         if (array_key_exists('column_id', $validated) && $validated['column_id'] !== $task->column_id) {
             $columnTitle = TaskColumn::find($validated['column_id'])?->title ?? 'Unknown';
@@ -488,12 +577,12 @@ class TaskController extends Controller
         }
         if (array_key_exists('due_date', $validated) && $validated['due_date'] !== optional($task->due_date)->toDateTimeString()) {
             $messages[] = $validated['due_date']
-                ? 'Due date set to ' . \Carbon\Carbon::parse($validated['due_date'])->format('M j, Y g:i A')
+                ? 'Due date set to '.Carbon::parse($validated['due_date'])->format('M j, Y g:i A')
                 : 'Due date removed';
         }
         if (array_key_exists('start_date', $validated) && $validated['start_date'] !== optional($task->start_date)->toDateTimeString()) {
             $messages[] = $validated['start_date']
-                ? 'Start time set to ' . \Carbon\Carbon::parse($validated['start_date'])->format('M j, Y g:i A')
+                ? 'Start time set to '.Carbon::parse($validated['start_date'])->format('M j, Y g:i A')
                 : 'Start time removed';
         }
         if (array_key_exists('progress', $validated) && (int) $validated['progress'] !== (int) $task->progress) {
@@ -512,10 +601,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($id, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -523,13 +612,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Task deleted successfully'
+                'message' => 'Task deleted successfully',
             ]);
         } catch (Exception $e) {
-            Log::error('Destroy Task Error: ' . $e->getMessage());
+            Log::error('Destroy Task Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete task.'
+                'message' => 'Failed to delete task.',
             ], 500);
         }
     }
@@ -551,7 +641,7 @@ class TaskController extends Controller
 
             foreach ($validated['tasks'] as $taskData) {
                 $task = $this->findUserTask($taskData['id'], $userId);
-                if (!$task || !$this->columnBelongsToProject($taskData['column_id'], $task->project_id)) {
+                if (! $task || ! $this->columnBelongsToProject($taskData['column_id'], $task->project_id)) {
                     continue;
                 }
                 $task->update([
@@ -562,13 +652,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Tasks reordered successfully'
+                'message' => 'Tasks reordered successfully',
             ]);
         } catch (Exception $e) {
-            Log::error('Reorder Tasks Error: ' . $e->getMessage());
+            Log::error('Reorder Tasks Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to reorder tasks.'
+                'message' => 'Failed to reorder tasks.',
             ], 500);
         }
     }
@@ -580,10 +671,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($taskId, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -608,19 +699,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Store Subtask Error: ' . $e->getMessage());
+            Log::error('Store Subtask Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Could not create subtask.'
+                'message' => 'Could not create subtask.',
             ], 500);
         }
     }
@@ -633,10 +725,10 @@ class TaskController extends Controller
         try {
             $subtask = TaskSubtask::find($id);
             $task = $subtask ? $this->findUserTask($subtask->task_id, $request->user()->id) : null;
-            if (!$subtask || !$task) {
+            if (! $subtask || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Subtask not found.'
+                    'message' => 'Subtask not found.',
                 ], 404);
             }
 
@@ -658,19 +750,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Update Subtask Error: ' . $e->getMessage());
+            Log::error('Update Subtask Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to update subtask.'
+                'message' => 'Failed to update subtask.',
             ], 500);
         }
     }
@@ -683,10 +776,10 @@ class TaskController extends Controller
         try {
             $subtask = TaskSubtask::find($id);
             $task = $subtask ? $this->findUserTask($subtask->task_id, $request->user()->id) : null;
-            if (!$subtask || !$task) {
+            if (! $subtask || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Subtask not found.'
+                    'message' => 'Subtask not found.',
                 ], 404);
             }
 
@@ -697,13 +790,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (Exception $e) {
-            Log::error('Destroy Subtask Error: ' . $e->getMessage());
+            Log::error('Destroy Subtask Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete subtask.'
+                'message' => 'Failed to delete subtask.',
             ], 500);
         }
     }
@@ -715,10 +809,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($taskId, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -727,10 +821,10 @@ class TaskController extends Controller
             ]);
 
             $note = $this->findUserNote($validated['note_id'], $request->user()->id);
-            if (!$note) {
+            if (! $note) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Note not found.'
+                    'message' => 'Note not found.',
                 ], 404);
             }
 
@@ -745,19 +839,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Store Task Note Error: ' . $e->getMessage());
+            Log::error('Store Task Note Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Could not attach note.'
+                'message' => 'Could not attach note.',
             ], 500);
         }
     }
@@ -770,10 +865,10 @@ class TaskController extends Controller
         try {
             $taskNote = TaskNote::find($id);
             $task = $taskNote ? $this->findUserTask($taskNote->task_id, $request->user()->id) : null;
-            if (!$taskNote || !$task) {
+            if (! $taskNote || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Linked note not found.'
+                    'message' => 'Linked note not found.',
                 ], 404);
             }
 
@@ -785,13 +880,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (Exception $e) {
-            Log::error('Destroy Task Note Error: ' . $e->getMessage());
+            Log::error('Destroy Task Note Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to remove note.'
+                'message' => 'Failed to remove note.',
             ], 500);
         }
     }
@@ -806,20 +902,20 @@ class TaskController extends Controller
         try {
             $subtask = TaskSubtask::find($id);
             $task = $subtask ? $this->findUserTask($subtask->task_id, $request->user()->id) : null;
-            if (!$subtask || !$task) {
+            if (! $subtask || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Subtask not found.'
+                    'message' => 'Subtask not found.',
                 ], 404);
             }
 
             $firstColumn = TaskColumn::where('project_id', $task->project_id)
                 ->orderBy('order_index')
                 ->first();
-            if (!$firstColumn) {
+            if (! $firstColumn) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'This project has no columns to place the new task in.'
+                    'message' => 'This project has no columns to place the new task in.',
                 ], 422);
             }
 
@@ -847,13 +943,14 @@ class TaskController extends Controller
                 'data' => [
                     'task' => $this->loadTask($task),
                     'created_task' => $this->loadTask($newTask),
-                ]
+                ],
             ], 201);
         } catch (Exception $e) {
-            Log::error('Convert Subtask Error: ' . $e->getMessage());
+            Log::error('Convert Subtask Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to convert subtask.'
+                'message' => 'Failed to convert subtask.',
             ], 500);
         }
     }
@@ -865,10 +962,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($taskId, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -881,7 +978,7 @@ class TaskController extends Controller
             if (empty($validated['body']) && empty($validated['image_url'])) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Comment must have text or an image.'
+                    'message' => 'Comment must have text or an image.',
                 ], 422);
             }
 
@@ -895,19 +992,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Store Comment Error: ' . $e->getMessage());
+            Log::error('Store Comment Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Could not create comment.'
+                'message' => 'Could not create comment.',
             ], 500);
         }
     }
@@ -920,10 +1018,10 @@ class TaskController extends Controller
         try {
             $comment = TaskComment::find($id);
             $task = $comment ? $this->findUserTask($comment->task_id, $request->user()->id) : null;
-            if (!$comment || !$task) {
+            if (! $comment || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Comment not found.'
+                    'message' => 'Comment not found.',
                 ], 404);
             }
 
@@ -935,19 +1033,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Update Comment Error: ' . $e->getMessage());
+            Log::error('Update Comment Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to update comment.'
+                'message' => 'Failed to update comment.',
             ], 500);
         }
     }
@@ -960,10 +1059,10 @@ class TaskController extends Controller
         try {
             $comment = TaskComment::find($id);
             $task = $comment ? $this->findUserTask($comment->task_id, $request->user()->id) : null;
-            if (!$comment || !$task) {
+            if (! $comment || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Comment not found.'
+                    'message' => 'Comment not found.',
                 ], 404);
             }
 
@@ -971,13 +1070,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (Exception $e) {
-            Log::error('Destroy Comment Error: ' . $e->getMessage());
+            Log::error('Destroy Comment Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete comment.'
+                'message' => 'Failed to delete comment.',
             ], 500);
         }
     }
@@ -990,38 +1090,44 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($taskId, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
-                'url' => 'required|string',
+                // Only http(s) is allowed — anything else (javascript:, data:, etc.)
+                // would execute in the app's own origin when a viewer opens it later.
+                'url' => 'required|string|regex:/^https?:\/\//i',
+                'type' => 'nullable|string|in:file,url',
                 'extension' => 'nullable|string|max:20',
                 'size' => 'nullable|integer',
             ]);
+
+            $validated['type'] = $validated['type'] ?? 'file';
 
             TaskAttachment::create(array_merge($validated, ['task_id' => $task->id]));
             TaskActivity::create(['task_id' => $task->id, 'message' => "Attachment \"{$validated['name']}\" added"]);
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Store Attachment Error: ' . $e->getMessage());
+            Log::error('Store Attachment Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Could not save attachment.'
+                'message' => 'Could not save attachment.',
             ], 500);
         }
     }
@@ -1034,10 +1140,10 @@ class TaskController extends Controller
         try {
             $attachment = TaskAttachment::find($id);
             $task = $attachment ? $this->findUserTask($attachment->task_id, $request->user()->id) : null;
-            if (!$attachment || !$task) {
+            if (! $attachment || ! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Attachment not found.'
+                    'message' => 'Attachment not found.',
                 ], 404);
             }
 
@@ -1047,13 +1153,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (Exception $e) {
-            Log::error('Destroy Attachment Error: ' . $e->getMessage());
+            Log::error('Destroy Attachment Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete attachment.'
+                'message' => 'Failed to delete attachment.',
             ], 500);
         }
     }
@@ -1065,10 +1172,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($taskId, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -1084,19 +1191,20 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (Exception $e) {
-            Log::error('Add Assignee Error: ' . $e->getMessage());
+            Log::error('Add Assignee Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to add assignee.'
+                'message' => 'Failed to add assignee.',
             ], 500);
         }
     }
@@ -1108,10 +1216,10 @@ class TaskController extends Controller
     {
         try {
             $task = $this->findUserTask($taskId, $request->user()->id);
-            if (!$task) {
+            if (! $task) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Task not found.'
+                    'message' => 'Task not found.',
                 ], 404);
             }
 
@@ -1123,13 +1231,14 @@ class TaskController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $this->loadTask($task)
+                'data' => $this->loadTask($task),
             ]);
         } catch (Exception $e) {
-            Log::error('Remove Assignee Error: ' . $e->getMessage());
+            Log::error('Remove Assignee Error: '.$e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to remove assignee.'
+                'message' => 'Failed to remove assignee.',
             ], 500);
         }
     }

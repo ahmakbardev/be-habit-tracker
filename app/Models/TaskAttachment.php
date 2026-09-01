@@ -16,6 +16,7 @@ class TaskAttachment extends Model
         'task_id',
         'name',
         'url',
+        'type',
         'extension',
         'size',
     ];

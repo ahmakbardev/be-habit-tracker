@@ -2,9 +2,13 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ForgotPasswordController;
+use App\Http\Controllers\HabitController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicNoteController;
+use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -66,13 +70,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/duplicate', 'duplicateNote');
         Route::patch('/{id}/publish', 'togglePublish');
         Route::delete('/{id}', 'destroyNote');
-        Route::post('/media/upload', [\App\Http\Controllers\MediaController::class, 'upload']);
+        Route::post('/media/upload', [MediaController::class, 'upload']);
     });
 
     /**
      * Habits API Routes
      */
-    Route::prefix('habits')->controller(App\Http\Controllers\HabitController::class)->group(function () {
+    Route::prefix('habits')->controller(HabitController::class)->group(function () {
         Route::get('/', 'index');
         Route::get('/completions', 'getCompletions');
         Route::get('/stats', 'getStats');
@@ -86,8 +90,9 @@ Route::middleware('auth:sanctum')->group(function () {
     /**
      * Tasks API Routes
      */
-    Route::prefix('tasks')->controller(App\Http\Controllers\TaskController::class)->group(function () {
+    Route::prefix('tasks')->controller(TaskController::class)->group(function () {
         Route::get('/', 'index');
+        Route::get('/overview/active', 'activeOverview');
         Route::get('/projects/{id}', 'showProject');
         Route::post('/projects', 'storeProject');
         Route::patch('/projects/{id}', 'updateProject');
@@ -120,7 +125,7 @@ Route::middleware('auth:sanctum')->group(function () {
     /**
      * Push Subscription Routes
      */
-    Route::prefix('push-subscriptions')->controller(App\Http\Controllers\PushSubscriptionController::class)->group(function () {
+    Route::prefix('push-subscriptions')->controller(PushSubscriptionController::class)->group(function () {
         Route::post('/', 'update');
         Route::delete('/', 'destroy');
     });
